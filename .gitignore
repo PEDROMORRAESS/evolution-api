@@ -1,5 +1,1 @@
-# Nunca commitar o .env com senhas reais
-.env
-
-# Manter o exemplo
-!.env.example
+# Repositório privado - .env incluído intencionalmente
