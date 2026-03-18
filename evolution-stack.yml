@@ -81,20 +81,27 @@ services:
           memory: 128M
 
   # ============================================================
-  # EVOLUTION API v2.1.1 (VERSÃO ESTÁVEL - NÃO ALTERAR)
+  # EVOLUTION API v2.2.0
+  # v2.1.1 tinha bug confirmado (PR #2365) que impedia QR Code
   # ============================================================
   evolution_api:
-    image: atendai/evolution-api:v2.1.1
+    image: atendai/evolution-api:v2.2.0
     restart: always
     networks:
       - evolution_network
       - traefik-public
     volumes:
       - evolution_instances_data:/evolution/instances
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     environment:
       # Server
       SERVER_URL: ${SERVER_URL:-https://api2.crescentiagroup.com.br}
       SERVER_PORT: "8080"
+
+      # DNS fix para VPS com IPv6
+      NODE_OPTIONS: "--dns-result-order=ipv4first"
 
       # Autenticação
       AUTHENTICATION_API_KEY: ${AUTHENTICATION_API_KEY}
@@ -128,6 +135,15 @@ services:
       # QR Code
       QRCODE_LIMIT: "30"
       QRCODE_COLOR: "#198754"
+
+      # WebSocket - necessário para atualizações em tempo real no Manager
+      WEBSOCKET_ENABLED: "true"
+      WEBSOCKET_GLOBAL_EVENTS: "true"
+
+      # CORS - permite Manager acessar a API
+      CORS_ORIGIN: "https://manager2.crescentiagroup.com.br,https://api2.crescentiagroup.com.br"
+      CORS_METHODS: "GET,POST,PUT,DELETE"
+      CORS_CREDENTIALS: "true"
 
       # Webhook
       WEBHOOK_GLOBAL_ENABLED: "false"
@@ -164,7 +180,6 @@ services:
       # Config Session Phone
       CONFIG_SESSION_PHONE_CLIENT: "Evolution API"
       CONFIG_SESSION_PHONE_NAME: "Chrome"
-      CONFIG_SESSION_PHONE_VERSION: "2.3000.1035423865"
 
       # Chatwoot - DESABILITADO
       CHATWOOT_ENABLED: "false"
@@ -199,6 +214,9 @@ services:
       restart_policy:
         condition: any
         delay: 10s
+      placement:
+        constraints:
+          - node.role == manager
       resources:
         limits:
           memory: 1G
@@ -206,14 +224,13 @@ services:
           memory: 512M
       labels:
         - "traefik.enable=true"
-        - "traefik.docker.network=traefik-public"
+        - "traefik.docker.network=Crescentia"
         # HTTPS Router
         - "traefik.http.routers.evolution-api.rule=Host(`api2.crescentiagroup.com.br`)"
         - "traefik.http.routers.evolution-api.entrypoints=websecure"
         - "traefik.http.routers.evolution-api.tls=true"
         - "traefik.http.routers.evolution-api.tls.certresolver=letsencryptresolver"
         - "traefik.http.routers.evolution-api.service=evolution-api"
-        - "traefik.http.routers.evolution-api.middlewares=evolution-headers"
         # HTTP Redirect
         - "traefik.http.routers.evolution-api-http.rule=Host(`api2.crescentiagroup.com.br`)"
         - "traefik.http.routers.evolution-api-http.entrypoints=web"
@@ -221,14 +238,14 @@ services:
         # Service
         - "traefik.http.services.evolution-api.loadbalancer.server.port=8080"
         - "traefik.http.services.evolution-api.loadbalancer.passHostHeader=true"
-        # Middleware Headers (não sobrescreve Connection para não quebrar WebSocket)
-        - "traefik.http.middlewares.evolution-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
-        # Middleware HTTPS redirect (pode já existir no seu Traefik)
+        - "traefik.http.services.evolution-api.loadbalancer.sticky.cookie=true"
+        - "traefik.http.services.evolution-api.loadbalancer.sticky.cookie.name=evolution_sticky"
+        # Middleware HTTPS redirect
         - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
         - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
 
   # ============================================================
-  # EVOLUTION MANAGER (Painel Web)
+  # EVOLUTION MANAGER (Painel Web) - porta correta: 9615
   # ============================================================
   evolution_manager:
     image: atendai/evolution-manager:latest
@@ -252,7 +269,7 @@ services:
           memory: 128M
       labels:
         - "traefik.enable=true"
-        - "traefik.docker.network=traefik-public"
+        - "traefik.docker.network=Crescentia"
         # HTTPS Router
         - "traefik.http.routers.evolution-manager.rule=Host(`manager2.crescentiagroup.com.br`)"
         - "traefik.http.routers.evolution-manager.entrypoints=websecure"
@@ -263,5 +280,6 @@ services:
         - "traefik.http.routers.evolution-manager-http.rule=Host(`manager2.crescentiagroup.com.br`)"
         - "traefik.http.routers.evolution-manager-http.entrypoints=web"
         - "traefik.http.routers.evolution-manager-http.middlewares=redirect-to-https"
-        # Service
-        - "traefik.http.services.evolution-manager.loadbalancer.server.port=80"
+        # Service - porta 9615 (correta para o Manager)
+        - "traefik.http.services.evolution-manager.loadbalancer.server.port=9615"
+        - "traefik.http.services.evolution-manager.loadbalancer.passHostHeader=true"
