@@ -5,10 +5,10 @@ networks:
     name: evolution_network
     driver: overlay
     attachable: true
-  # Conectar ao Traefik para roteamento SSL
+  # Rede principal onde o Traefik está rodando
   traefik-public:
     external: true
-    name: traefik-public
+    name: Crescentia
 
 volumes:
   evolution_postgres_data:
