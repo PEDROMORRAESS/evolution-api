@@ -211,7 +211,7 @@ services:
         - "traefik.http.routers.evolution-api.rule=Host(`api2.crescentiagroup.com.br`)"
         - "traefik.http.routers.evolution-api.entrypoints=websecure"
         - "traefik.http.routers.evolution-api.tls=true"
-        - "traefik.http.routers.evolution-api.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.evolution-api.tls.certresolver=letsencryptresolver"
         - "traefik.http.routers.evolution-api.service=evolution-api"
         - "traefik.http.routers.evolution-api.middlewares=evolution-headers"
         # HTTP Redirect
@@ -258,7 +258,7 @@ services:
         - "traefik.http.routers.evolution-manager.rule=Host(`manager2.crescentiagroup.com.br`)"
         - "traefik.http.routers.evolution-manager.entrypoints=websecure"
         - "traefik.http.routers.evolution-manager.tls=true"
-        - "traefik.http.routers.evolution-manager.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.evolution-manager.tls.certresolver=letsencryptresolver"
         - "traefik.http.routers.evolution-manager.service=evolution-manager"
         # HTTP Redirect
         - "traefik.http.routers.evolution-manager-http.rule=Host(`manager2.crescentiagroup.com.br`)"
