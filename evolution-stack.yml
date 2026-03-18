@@ -213,12 +213,17 @@ services:
         - "traefik.http.routers.evolution-api.tls=true"
         - "traefik.http.routers.evolution-api.tls.certresolver=letsencrypt"
         - "traefik.http.routers.evolution-api.service=evolution-api"
+        - "traefik.http.routers.evolution-api.middlewares=evolution-headers"
         # HTTP Redirect
         - "traefik.http.routers.evolution-api-http.rule=Host(`api2.crescentiagroup.com.br`)"
         - "traefik.http.routers.evolution-api-http.entrypoints=web"
         - "traefik.http.routers.evolution-api-http.middlewares=redirect-to-https"
         # Service
         - "traefik.http.services.evolution-api.loadbalancer.server.port=8080"
+        - "traefik.http.services.evolution-api.loadbalancer.passHostHeader=true"
+        # Middleware WebSocket + Headers
+        - "traefik.http.middlewares.evolution-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
+        - "traefik.http.middlewares.evolution-headers.headers.customrequestheaders.Connection=keep-alive"
         # Middleware HTTPS redirect (pode já existir no seu Traefik)
         - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
         - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
