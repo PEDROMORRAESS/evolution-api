@@ -1,0 +1,263 @@
+version: "3.8"
+
+networks:
+  evolution_network:
+    name: evolution_network
+    driver: overlay
+    attachable: true
+  # Conectar ao Traefik para roteamento SSL
+  traefik-public:
+    external: true
+    name: traefik-public
+
+volumes:
+  evolution_postgres_data:
+    driver: local
+  evolution_redis_data:
+    driver: local
+  evolution_instances_data:
+    driver: local
+
+services:
+
+  # ============================================================
+  # POSTGRES DEDICADO PARA EVOLUTION (isolado dos existentes)
+  # ============================================================
+  evolution_postgres:
+    image: postgres:15-alpine
+    restart: always
+    networks:
+      - evolution_network
+    volumes:
+      - evolution_postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-evolution_db}
+      POSTGRES_USER: ${POSTGRES_USER:-evolution_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_MAX_CONNECTIONS: "1000"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-evolution_user} -d ${POSTGRES_DB:-evolution_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 5s
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # ============================================================
+  # REDIS DEDICADO PARA EVOLUTION (isolado dos existentes)
+  # ============================================================
+  evolution_redis:
+    image: redis:7-alpine
+    restart: always
+    networks:
+      - evolution_network
+    volumes:
+      - evolution_redis_data:/data
+    command: redis-server --appendonly yes --port 6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 5s
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  # ============================================================
+  # EVOLUTION API v2.1.1 (VERSÃO ESTÁVEL - NÃO ALTERAR)
+  # ============================================================
+  evolution_api:
+    image: atendai/evolution-api:v2.1.1
+    restart: always
+    networks:
+      - evolution_network
+      - traefik-public
+    volumes:
+      - evolution_instances_data:/evolution/instances
+    environment:
+      # Server
+      SERVER_URL: ${SERVER_URL:-https://api2.crescentiagroup.com.br}
+      SERVER_PORT: "8080"
+
+      # Autenticação
+      AUTHENTICATION_API_KEY: ${AUTHENTICATION_API_KEY}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "true"
+
+      # Database
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://${POSTGRES_USER:-evolution_user}:${POSTGRES_PASSWORD}@evolution_postgres:5432/${POSTGRES_DB:-evolution_db}
+      DATABASE_CONNECTION_CLIENT_NAME: evolution_v2
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "true"
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      DATABASE_SAVE_DATA_CHATS: "true"
+      DATABASE_SAVE_DATA_LABELS: "true"
+      DATABASE_SAVE_DATA_HISTORIC: "true"
+
+      # Redis Cache
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://evolution_redis:6379/1
+      CACHE_REDIS_PREFIX_KEY: evolution_v2
+      CACHE_REDIS_SAVE_INSTANCES: "false"
+      CACHE_LOCAL_ENABLED: "false"
+
+      # Log
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_COLOR: "true"
+      LOG_BAILEYS: ERROR
+
+      # QR Code
+      QRCODE_LIMIT: "30"
+      QRCODE_COLOR: "#198754"
+
+      # Webhook
+      WEBHOOK_GLOBAL_ENABLED: "false"
+      WEBHOOK_GLOBAL_URL: ""
+      WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS: "false"
+      WEBHOOK_EVENTS_APPLICATION_STARTUP: "false"
+      WEBHOOK_EVENTS_QRCODE_UPDATED: "true"
+      WEBHOOK_EVENTS_MESSAGES_SET: "false"
+      WEBHOOK_EVENTS_MESSAGES_UPSERT: "true"
+      WEBHOOK_EVENTS_MESSAGES_EDITED: "true"
+      WEBHOOK_EVENTS_MESSAGES_UPDATE: "true"
+      WEBHOOK_EVENTS_MESSAGES_DELETE: "true"
+      WEBHOOK_EVENTS_SEND_MESSAGE: "true"
+      WEBHOOK_EVENTS_CONTACTS_SET: "true"
+      WEBHOOK_EVENTS_CONTACTS_UPSERT: "true"
+      WEBHOOK_EVENTS_CONTACTS_UPDATE: "true"
+      WEBHOOK_EVENTS_PRESENCE_UPDATE: "true"
+      WEBHOOK_EVENTS_CHATS_SET: "true"
+      WEBHOOK_EVENTS_CHATS_UPSERT: "true"
+      WEBHOOK_EVENTS_CHATS_UPDATE: "true"
+      WEBHOOK_EVENTS_CHATS_DELETE: "true"
+      WEBHOOK_EVENTS_GROUPS_UPSERT: "true"
+      WEBHOOK_EVENTS_GROUPS_UPDATE: "true"
+      WEBHOOK_EVENTS_GROUP_PARTICIPANTS_UPDATE: "true"
+      WEBHOOK_EVENTS_CONNECTION_UPDATE: "true"
+      WEBHOOK_EVENTS_LABELS_EDIT: "true"
+      WEBHOOK_EVENTS_LABELS_ASSOCIATION: "true"
+      WEBHOOK_EVENTS_CALL: "true"
+      WEBHOOK_EVENTS_TYPEBOT_START: "false"
+      WEBHOOK_EVENTS_TYPEBOT_CHANGE_FLOW: "false"
+      WEBHOOK_EVENTS_ERRORS: "false"
+      WEBHOOK_EVENTS_ERRORS_WEBHOOK: ""
+
+      # Config Session Phone
+      CONFIG_SESSION_PHONE_CLIENT: "Evolution API"
+      CONFIG_SESSION_PHONE_NAME: "Chrome"
+      CONFIG_SESSION_PHONE_VERSION: "2.3000.1015901307"
+
+      # Chatwoot - DESABILITADO
+      CHATWOOT_ENABLED: "false"
+
+      # Typebot - DESABILITADO
+      TYPEBOT_ENABLED: "false"
+
+      # OpenAI - DESABILITADO
+      OPENAI_ENABLED: "false"
+
+      # Dify - DESABILITADO
+      DIFY_ENABLED: "false"
+
+      # Language
+      LANGUAGE: pt-BR
+
+      # Instâncias
+      DEL_INSTANCE: "false"
+      DEL_TEMP_INSTANCES: "true"
+
+    depends_on:
+      - evolution_postgres
+      - evolution_redis
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 10s
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=traefik-public"
+        # HTTPS Router
+        - "traefik.http.routers.evolution-api.rule=Host(`api2.crescentiagroup.com.br`)"
+        - "traefik.http.routers.evolution-api.entrypoints=websecure"
+        - "traefik.http.routers.evolution-api.tls=true"
+        - "traefik.http.routers.evolution-api.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.evolution-api.service=evolution-api"
+        # HTTP Redirect
+        - "traefik.http.routers.evolution-api-http.rule=Host(`api2.crescentiagroup.com.br`)"
+        - "traefik.http.routers.evolution-api-http.entrypoints=web"
+        - "traefik.http.routers.evolution-api-http.middlewares=redirect-to-https"
+        # Service
+        - "traefik.http.services.evolution-api.loadbalancer.server.port=8080"
+        # Middleware HTTPS redirect (pode já existir no seu Traefik)
+        - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+        - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
+
+  # ============================================================
+  # EVOLUTION MANAGER (Painel Web)
+  # ============================================================
+  evolution_manager:
+    image: atendai/evolution-manager:latest
+    restart: always
+    networks:
+      - evolution_network
+      - traefik-public
+    environment:
+      VITE_EVOLUTION_API_URL: ${SERVER_URL:-https://api2.crescentiagroup.com.br}
+    depends_on:
+      - evolution_api
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 5s
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=traefik-public"
+        # HTTPS Router
+        - "traefik.http.routers.evolution-manager.rule=Host(`manager2.crescentiagroup.com.br`)"
+        - "traefik.http.routers.evolution-manager.entrypoints=websecure"
+        - "traefik.http.routers.evolution-manager.tls=true"
+        - "traefik.http.routers.evolution-manager.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.evolution-manager.service=evolution-manager"
+        # HTTP Redirect
+        - "traefik.http.routers.evolution-manager-http.rule=Host(`manager2.crescentiagroup.com.br`)"
+        - "traefik.http.routers.evolution-manager-http.entrypoints=web"
+        - "traefik.http.routers.evolution-manager-http.middlewares=redirect-to-https"
+        # Service
+        - "traefik.http.services.evolution-manager.loadbalancer.server.port=80"
