@@ -221,9 +221,8 @@ services:
         # Service
         - "traefik.http.services.evolution-api.loadbalancer.server.port=8080"
         - "traefik.http.services.evolution-api.loadbalancer.passHostHeader=true"
-        # Middleware WebSocket + Headers
+        # Middleware Headers (não sobrescreve Connection para não quebrar WebSocket)
         - "traefik.http.middlewares.evolution-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
-        - "traefik.http.middlewares.evolution-headers.headers.customrequestheaders.Connection=keep-alive"
         # Middleware HTTPS redirect (pode já existir no seu Traefik)
         - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
         - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
